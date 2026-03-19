@@ -1,13 +1,15 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QR_GEN — Generador de Códigos QR</title>
-  <meta name="description" content="Generador de códigos QR para URLs, texto, contactos y redes WiFi." />
+  <meta name="description" content="Generador de códigos QR personalizado para URLs, texto, contactos y redes WiFi." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <!-- QR generator library (pure JS, no dependencies) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -18,9 +20,16 @@
 
     <!-- Header -->
     <header class="header">
-      <div class="logo">
-        QR<span class="accent">_</span>GEN
-        <span class="version">v2.0</span>
+      <div class="header-top">
+        <div class="logo">
+          QR<span class="accent">_</span>GEN
+          <span class="version">v3.0</span>
+        </div>
+        <!-- Theme toggle -->
+        <button class="theme-toggle" id="theme-toggle" title="Cambiar tema" aria-label="Cambiar modo claro/oscuro">
+          <span class="theme-icon" id="theme-icon">☀</span>
+          <span class="theme-label" id="theme-label">Modo claro</span>
+        </button>
       </div>
       <p class="subtitle">Generador de códigos QR — URL · Texto · Contacto · WiFi</p>
     </header>
@@ -41,17 +50,14 @@
 
         <!-- Panels -->
         <div class="fields">
-          <!-- URL -->
           <div class="panel active" id="panel-url">
             <label class="field-label">URL</label>
             <input class="field-input" id="url" type="url" placeholder="https://ejemplo.com" value="https://" />
           </div>
-          <!-- Text -->
           <div class="panel" id="panel-text">
             <label class="field-label">Mensaje o texto libre</label>
             <textarea class="field-input field-textarea" id="text" placeholder="Escribe lo que quieras..."></textarea>
           </div>
-          <!-- Contact -->
           <div class="panel" id="panel-contact">
             <label class="field-label">Nombre completo</label>
             <input class="field-input" id="c-name" type="text" placeholder="Juan Pérez" />
@@ -62,7 +68,6 @@
             <label class="field-label mt">Empresa (opcional)</label>
             <input class="field-input" id="c-org" type="text" placeholder="Empresa S.A." />
           </div>
-          <!-- WiFi -->
           <div class="panel" id="panel-wifi">
             <label class="field-label">Nombre de red (SSID)</label>
             <input class="field-input" id="w-ssid" type="text" placeholder="MiRedWifi" />
@@ -87,62 +92,101 @@
 
           <div class="customize-body hidden" id="customize-body">
 
-            <div class="custom-row">
-              <div class="custom-col">
-                <label class="field-label">Color de puntos</label>
-                <div class="color-wrap">
-                  <input type="color" class="color-pick" id="c-fg" value="#000000" />
-                  <input type="text" class="field-input color-hex" id="c-fg-hex" value="#000000" maxlength="7" />
+            <!-- Forma de los módulos -->
+            <div class="custom-section">
+              <label class="field-label">Forma de los módulos</label>
+              <div class="shape-grid">
+                <button class="shape-btn active" data-shape="square" title="Cuadrado">
+                  <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" rx="1"/></svg>
+                  <span>Cuadrado</span>
+                </button>
+                <button class="shape-btn" data-shape="rounded" title="Redondeado">
+                  <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" rx="5"/></svg>
+                  <span>Redondeado</span>
+                </button>
+                <button class="shape-btn" data-shape="circle" title="Círculo">
+                  <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/></svg>
+                  <span>Círculo</span>
+                </button>
+                <button class="shape-btn" data-shape="diamond" title="Diamante">
+                  <svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg>
+                  <span>Diamante</span>
+                </button>
+                <button class="shape-btn" data-shape="star" title="Estrella">
+                  <svg viewBox="0 0 20 20"><polygon points="10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,12 0.5,7.6 7.1,7"/></svg>
+                  <span>Estrella</span>
+                </button>
+                <button class="shape-btn" data-shape="heart" title="Corazón">
+                  <svg viewBox="0 0 20 20"><path d="M10,17 C10,17 2,12 2,6.5 C2,4 4,2 6.5,2 C8,2 9.5,3 10,4 C10.5,3 12,2 13.5,2 C16,2 18,4 18,6.5 C18,12 10,17 10,17Z"/></svg>
+                  <span>Corazón</span>
+                </button>
+                <button class="shape-btn" data-shape="leaf" title="Hoja">
+                  <svg viewBox="0 0 20 20"><path d="M10,18 C10,18 2,14 2,7 C2,7 6,2 10,2 C14,2 18,7 18,7 C18,14 10,18 10,18Z"/></svg>
+                  <span>Hoja</span>
+                </button>
+                <button class="shape-btn" data-shape="cross" title="Cruz">
+                  <svg viewBox="0 0 20 20"><rect x="7" y="1" width="6" height="18" rx="1"/><rect x="1" y="7" width="18" height="6" rx="1"/></svg>
+                  <span>Cruz</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Colores -->
+            <div class="custom-section">
+              <div class="custom-row">
+                <div class="custom-col">
+                  <label class="field-label">Color de módulos</label>
+                  <div class="color-wrap">
+                    <input type="color" class="color-pick" id="c-fg" value="#000000" />
+                    <input type="text" class="field-input color-hex" id="c-fg-hex" value="#000000" maxlength="7" />
+                  </div>
+                </div>
+                <div class="custom-col">
+                  <label class="field-label">Color de fondo</label>
+                  <div class="color-wrap">
+                    <input type="color" class="color-pick" id="c-bg" value="#ffffff" />
+                    <input type="text" class="field-input color-hex" id="c-bg-hex" value="#ffffff" maxlength="7" />
+                  </div>
                 </div>
               </div>
-              <div class="custom-col">
-                <label class="field-label">Color de fondo</label>
-                <div class="color-wrap">
-                  <input type="color" class="color-pick" id="c-bg" value="#ffffff" />
-                  <input type="text" class="field-input color-hex" id="c-bg-hex" value="#ffffff" maxlength="7" />
+            </div>
+
+            <!-- Tamaño y ECC -->
+            <div class="custom-section">
+              <div class="custom-row">
+                <div class="custom-col">
+                  <label class="field-label">Tamaño de descarga</label>
+                  <select class="field-input field-select" id="c-size">
+                    <option value="300">300 × 300 px</option>
+                    <option value="500" selected>500 × 500 px</option>
+                    <option value="800">800 × 800 px</option>
+                    <option value="1200">1200 × 1200 px</option>
+                  </select>
+                </div>
+                <div class="custom-col">
+                  <label class="field-label">Corrección de errores</label>
+                  <select class="field-input field-select" id="c-ecc">
+                    <option value="L">L — 7%</option>
+                    <option value="M" selected>M — 15%</option>
+                    <option value="Q">Q — 25%</option>
+                    <option value="H">H — 30%</option>
+                  </select>
                 </div>
               </div>
             </div>
 
-            <div class="custom-row">
-              <div class="custom-col">
-                <label class="field-label">Tamaño de descarga</label>
-                <select class="field-input field-select" id="c-size">
-                  <option value="300">300 × 300 px</option>
-                  <option value="500" selected>500 × 500 px</option>
-                  <option value="800">800 × 800 px</option>
-                  <option value="1200">1200 × 1200 px</option>
-                </select>
-              </div>
-              <div class="custom-col">
-                <label class="field-label">Corrección de errores</label>
-                <select class="field-input field-select" id="c-ecc">
-                  <option value="L">L — 7%</option>
-                  <option value="M" selected>M — 15%</option>
-                  <option value="Q">Q — 25%</option>
-                  <option value="H">H — 30%</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="custom-row">
-              <div class="custom-col full">
-                <label class="field-label">Margen (quiet zone) — <span id="c-margin-val">10</span>px</label>
-                <input type="range" class="slider" id="c-margin" min="0" max="30" value="10" step="1" />
-              </div>
-            </div>
-
-            <div class="presets">
-              <span class="field-label" style="margin-bottom:0.5rem;display:block">Presets de color</span>
+            <!-- Presets -->
+            <div class="custom-section">
+              <label class="field-label" style="margin-bottom:0.6rem">Presets de color</label>
               <div class="preset-list">
-                <button class="preset" data-fg="000000" data-bg="ffffff" title="Clásico"><span style="background:#000;border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="ffffff" data-bg="0d0d0d" title="Dark"><span style="background:#0d0d0d;border:1px solid #555;border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="c8a96e" data-bg="0d0d0d" title="Gold"><span style="background:linear-gradient(135deg,#c8a96e,#0d0d0d);border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="1a1a2e" data-bg="e8f4f8" title="Navy"><span style="background:linear-gradient(135deg,#1a1a2e,#e8f4f8);border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="e63946" data-bg="fff1f0" title="Rojo"><span style="background:linear-gradient(135deg,#e63946,#fff1f0);border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="2d6a4f" data-bg="d8f3dc" title="Verde"><span style="background:linear-gradient(135deg,#2d6a4f,#d8f3dc);border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="5c4033" data-bg="fdf6ec" title="Café"><span style="background:linear-gradient(135deg,#5c4033,#fdf6ec);border-radius:3px;display:block;width:100%;height:100%"></span></button>
-                <button class="preset" data-fg="6c3fc5" data-bg="f3eeff" title="Morado"><span style="background:linear-gradient(135deg,#6c3fc5,#f3eeff);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="000000" data-bg="ffffff" title="Clásico"><span style="background:#000"></span></button>
+                <button class="preset" data-fg="ffffff" data-bg="0d0d0d" title="Dark"><span style="background:#0d0d0d;border:1px solid #555"></span></button>
+                <button class="preset" data-fg="c8a96e" data-bg="0d0d0d" title="Gold"><span style="background:linear-gradient(135deg,#c8a96e 50%,#0d0d0d 50%)"></span></button>
+                <button class="preset" data-fg="1a1a2e" data-bg="e8f4f8" title="Navy"><span style="background:linear-gradient(135deg,#1a1a2e 50%,#e8f4f8 50%)"></span></button>
+                <button class="preset" data-fg="e63946" data-bg="fff1f0" title="Rojo"><span style="background:linear-gradient(135deg,#e63946 50%,#fff1f0 50%)"></span></button>
+                <button class="preset" data-fg="2d6a4f" data-bg="d8f3dc" title="Verde"><span style="background:linear-gradient(135deg,#2d6a4f 50%,#d8f3dc 50%)"></span></button>
+                <button class="preset" data-fg="5c4033" data-bg="fdf6ec" title="Café"><span style="background:linear-gradient(135deg,#5c4033 50%,#fdf6ec 50%)"></span></button>
+                <button class="preset" data-fg="6c3fc5" data-bg="f3eeff" title="Morado"><span style="background:linear-gradient(135deg,#6c3fc5 50%,#f3eeff 50%)"></span></button>
               </div>
             </div>
 
@@ -153,14 +197,12 @@
 
       <!-- Right: QR Preview -->
       <div class="preview-panel">
-        <div class="qr-frame" id="qr-frame">
+        <div class="qr-wrap">
           <div class="corner tl"></div>
           <div class="corner tr"></div>
           <div class="corner bl"></div>
           <div class="corner br"></div>
-
           <canvas id="qr-canvas" class="qr-canvas hidden"></canvas>
-
           <div class="qr-empty" id="qr-empty">
             <span class="qr-empty-icon">◻</span>
             <span class="qr-empty-text">esperando datos</span>
@@ -177,9 +219,8 @@
 
     </div>
 
-    <!-- Footer -->
     <footer class="footer">
-      <span>QR generado vía qrserver.com</span>
+      <span>QR generado localmente · sin enviar datos</span>
       <span class="footer-brand">◈ QR_GEN</span>
     </footer>
 

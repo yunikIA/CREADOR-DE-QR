@@ -1,19 +1,28 @@
-/* ─── QR_GEN v2.0 — app.js ───────────────────────────────── */
+/* ─── QR_GEN v3.0 — app.js ───────────────────────────────── */
+/* Genera QR 100% local con canvas + formas personalizadas    */
 
 (function () {
   "use strict";
 
-  /* ── Config ──────────────────────────────────────────────── */
-  const QR_BASE    = "https://api.qrserver.com/v1/create-qr-code/";
-  const DEBOUNCE   = 450;
+  /* ── Constants ───────────────────────────────────────────── */
+  const DEBOUNCE = 400;
+  const HINTS = {
+    url:     "escaneable con cualquier cámara",
+    text:    "texto plano codificado",
+    contact: "vCard 3.0 compatible",
+    wifi:    "compatible con iOS & Android",
+  };
 
   /* ── State ───────────────────────────────────────────────── */
   let currentTab   = "url";
   let currentValue = "";
+  let currentShape = "square";
   let timer        = null;
   let customOpen   = false;
+  let isDark       = true;
 
   /* ── DOM refs ────────────────────────────────────────────── */
+  const html       = document.documentElement;
   const tabs       = document.querySelectorAll(".tab");
   const panels     = document.querySelectorAll(".panel");
   const qrCanvas   = document.getElementById("qr-canvas");
@@ -25,89 +34,262 @@
   const ctToggle   = document.getElementById("customize-toggle");
   const ctBody     = document.getElementById("customize-body");
   const ctArrow    = document.getElementById("ct-arrow");
-
-  // Color pickers
+  const themeBtn   = document.getElementById("theme-toggle");
+  const themeIcon  = document.getElementById("theme-icon");
+  const themeLabel = document.getElementById("theme-label");
   const fgPick     = document.getElementById("c-fg");
   const fgHex      = document.getElementById("c-fg-hex");
   const bgPick     = document.getElementById("c-bg");
   const bgHex      = document.getElementById("c-bg-hex");
   const sizeEl     = document.getElementById("c-size");
   const eccEl      = document.getElementById("c-ecc");
-  const marginEl   = document.getElementById("c-margin");
-  const marginVal  = document.getElementById("c-margin-val");
+  const shapeBtns  = document.querySelectorAll(".shape-btn");
   const presets    = document.querySelectorAll(".preset");
 
-  /* ── Hints ───────────────────────────────────────────────── */
-  const HINTS = {
-    url:     "escaneable con cualquier cámara",
-    text:    "texto plano codificado",
-    contact: "vCard 3.0 compatible",
-    wifi:    "compatible con iOS & Android",
-  };
+  /* ──────────────────────────────────────────────────────────
+     THEME TOGGLE
+  ────────────────────────────────────────────────────────── */
+  themeBtn.addEventListener("click", function () {
+    isDark = !isDark;
+    html.setAttribute("data-theme", isDark ? "dark" : "light");
+    themeIcon.textContent  = isDark ? "☀" : "☾";
+    themeLabel.textContent = isDark ? "Modo claro" : "Modo oscuro";
+    // Re-render QR so colors still match if using custom colors
+    schedule();
+  });
 
-  /* ── Helpers ─────────────────────────────────────────────── */
-  function hexWithout(hex) {
-    // Remove # for API
-    return hex.replace(/^#/, "");
-  }
-
-  function isValidHex(val) {
-    return /^#[0-9a-fA-F]{6}$/.test(val);
-  }
-
-  /* ── Build QR data string ────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     BUILD QR DATA VALUE
+  ────────────────────────────────────────────────────────── */
   function buildValue() {
     switch (currentTab) {
       case "url":
-        return document.getElementById("url").value.trim();
-
+        return (document.getElementById("url").value || "").trim();
       case "text":
-        return document.getElementById("text").value.trim();
-
+        return (document.getElementById("text").value || "").trim();
       case "contact": {
-        const name  = document.getElementById("c-name").value.trim();
-        const phone = document.getElementById("c-phone").value.trim();
-        const email = document.getElementById("c-email").value.trim();
-        const org   = document.getElementById("c-org").value.trim();
+        var name  = (document.getElementById("c-name").value  || "").trim();
+        var phone = (document.getElementById("c-phone").value || "").trim();
+        var email = (document.getElementById("c-email").value || "").trim();
+        var org   = (document.getElementById("c-org").value   || "").trim();
         if (!name && !phone && !email) return "";
-        return [
-          "BEGIN:VCARD", "VERSION:3.0",
+        return ["BEGIN:VCARD","VERSION:3.0",
           "FN:" + name,
           phone ? "TEL:" + phone : null,
           email ? "EMAIL:" + email : null,
-          org   ? "ORG:" + org   : null,
-          "END:VCARD",
+          org   ? "ORG:" + org : null,
+          "END:VCARD"
         ].filter(Boolean).join("\n");
       }
-
       case "wifi": {
-        const ssid = document.getElementById("w-ssid").value.trim();
+        var ssid = (document.getElementById("w-ssid").value || "").trim();
         if (!ssid) return "";
-        const pass = document.getElementById("w-pass").value;
-        const sec  = document.getElementById("w-sec").value;
+        var pass = document.getElementById("w-pass").value || "";
+        var sec  = document.getElementById("w-sec").value;
         return "WIFI:T:" + sec + ";S:" + ssid + ";P:" + pass + ";;";
       }
     }
     return "";
   }
 
-  /* ── Build API URL ───────────────────────────────────────── */
-  function buildURL(value, size, fg, bg, margin, ecc) {
-    const params = new URLSearchParams({
-      size:    size + "x" + size,
-      data:    value,
-      color:   hexWithout(fg),
-      bgcolor: hexWithout(bg),
-      margin:  margin,
-      ecc:     ecc,
-      format:  "png",
-    });
-    return QR_BASE + "?" + params.toString();
+  /* ──────────────────────────────────────────────────────────
+     QR MATRIX — uses qrcode.js to get module matrix
+  ────────────────────────────────────────────────────────── */
+  function getQRMatrix(text, ecc) {
+    // qrcode.js exposes QRCode object; we create a hidden div to extract matrix
+    var eccMap = { L: QRCode.CorrectLevel.L, M: QRCode.CorrectLevel.M, Q: QRCode.CorrectLevel.Q, H: QRCode.CorrectLevel.H };
+    var tmp = document.createElement("div");
+    tmp.style.cssText = "position:absolute;left:-9999px;visibility:hidden;";
+    document.body.appendChild(tmp);
+    try {
+      var qr = new QRCode(tmp, {
+        text: text,
+        width: 256, height: 256,
+        correctLevel: eccMap[ecc] || QRCode.CorrectLevel.M,
+      });
+      // Extract the internal matrix from qrcode.js internals
+      var qrObj = qr._oQRCode;
+      var count = qrObj.getModuleCount();
+      var matrix = [];
+      for (var r = 0; r < count; r++) {
+        matrix[r] = [];
+        for (var c = 0; c < count; c++) {
+          matrix[r][c] = qrObj.isDark(r, c);
+        }
+      }
+      return matrix;
+    } catch(e) {
+      return null;
+    } finally {
+      document.body.removeChild(tmp);
+    }
   }
 
-  /* ── Render QR into canvas ───────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     SHAPE DRAWERS
+     Each receives: ctx, x, y, size (cell size in px), padding
+  ────────────────────────────────────────────────────────── */
+  var Shapes = {
+
+    square: function (ctx, x, y, s) {
+      var p = s * 0.08;
+      ctx.fillRect(x + p, y + p, s - p*2, s - p*2);
+    },
+
+    rounded: function (ctx, x, y, s) {
+      var p  = s * 0.08;
+      var r  = (s - p*2) * 0.38;
+      var x0 = x + p, y0 = y + p, w = s - p*2, h = s - p*2;
+      ctx.beginPath();
+      ctx.moveTo(x0 + r, y0);
+      ctx.arcTo(x0+w, y0,   x0+w, y0+h, r);
+      ctx.arcTo(x0+w, y0+h, x0,   y0+h, r);
+      ctx.arcTo(x0,   y0+h, x0,   y0,   r);
+      ctx.arcTo(x0,   y0,   x0+w, y0,   r);
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    circle: function (ctx, x, y, s) {
+      var p  = s * 0.1;
+      var cx = x + s / 2;
+      var cy = y + s / 2;
+      var r  = (s - p*2) / 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+    },
+
+    diamond: function (ctx, x, y, s) {
+      var p  = s * 0.1;
+      var cx = x + s / 2;
+      var cy = y + s / 2;
+      var r  = s / 2 - p;
+      ctx.beginPath();
+      ctx.moveTo(cx,     cy - r);
+      ctx.lineTo(cx + r, cy);
+      ctx.lineTo(cx,     cy + r);
+      ctx.lineTo(cx - r, cy);
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    star: function (ctx, x, y, s) {
+      var cx    = x + s / 2;
+      var cy    = y + s / 2;
+      var outer = s / 2 * 0.85;
+      var inner = outer * 0.42;
+      var pts   = 5;
+      ctx.beginPath();
+      for (var i = 0; i < pts * 2; i++) {
+        var angle = (i * Math.PI / pts) - Math.PI / 2;
+        var r     = (i % 2 === 0) ? outer : inner;
+        var px    = cx + r * Math.cos(angle);
+        var py    = cy + r * Math.sin(angle);
+        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    heart: function (ctx, x, y, s) {
+      var cx = x + s / 2;
+      var cy = y + s / 2;
+      var w  = s * 0.82;
+      var h  = s * 0.82;
+      var ox = cx - w / 2;
+      var oy = cy - h / 2 + h * 0.1;
+      ctx.beginPath();
+      ctx.moveTo(cx, oy + h * 0.8);
+      // Left curve
+      ctx.bezierCurveTo(
+        ox,             oy + h * 0.5,
+        ox,             oy,
+        cx - w * 0.01,  oy + h * 0.25
+      );
+      // Top left bump
+      ctx.bezierCurveTo(
+        ox + w * 0.15,  oy - h * 0.12,
+        cx,             oy + h * 0.05,
+        cx,             oy + h * 0.28
+      );
+      // Top right bump
+      ctx.bezierCurveTo(
+        cx,             oy + h * 0.05,
+        ox + w * 0.85,  oy - h * 0.12,
+        cx + w * 0.01,  oy + h * 0.25
+      );
+      // Right curve
+      ctx.bezierCurveTo(
+        ox + w,         oy,
+        ox + w,         oy + h * 0.5,
+        cx,             oy + h * 0.8
+      );
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    leaf: function (ctx, x, y, s) {
+      var p  = s * 0.1;
+      var x0 = x + p, y0 = y + p;
+      var w  = s - p*2, h = s - p*2;
+      ctx.beginPath();
+      ctx.moveTo(x0 + w/2, y0);
+      ctx.bezierCurveTo(x0 + w, y0,       x0 + w, y0 + h,   x0 + w/2, y0 + h);
+      ctx.bezierCurveTo(x0,     y0 + h,   x0,     y0,       x0 + w/2, y0);
+      ctx.closePath();
+      ctx.fill();
+    },
+
+    cross: function (ctx, x, y, s) {
+      var p  = s * 0.1;
+      var t  = (s - p*2) * 0.3; // arm thickness ratio
+      var cx = x + s/2, cy = y + s/2;
+      var hs = s/2 - p;
+      ctx.beginPath();
+      ctx.rect(cx - t/2, cy - hs, t, hs*2);
+      ctx.rect(cx - hs,  cy - t/2, hs*2, t);
+      ctx.fill();
+    },
+  };
+
+  /* ──────────────────────────────────────────────────────────
+     DRAW QR ON CANVAS
+  ────────────────────────────────────────────────────────── */
+  function drawQR(matrix, canvas, fgColor, bgColor, shape, canvasSize) {
+    var count   = matrix.length;
+    var padding = Math.round(canvasSize * 0.04);
+    var cell    = Math.floor((canvasSize - padding * 2) / count);
+    var total   = cell * count;
+    var offX    = Math.round((canvasSize - total) / 2);
+    var offY    = offX;
+
+    canvas.width  = canvasSize;
+    canvas.height = canvasSize;
+    var ctx = canvas.getContext("2d");
+
+    // Background
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, canvasSize, canvasSize);
+
+    // Modules
+    ctx.fillStyle = fgColor;
+    var drawFn = Shapes[shape] || Shapes.square;
+
+    for (var r = 0; r < count; r++) {
+      for (var c = 0; c < count; c++) {
+        if (matrix[r][c]) {
+          drawFn(ctx, offX + c * cell, offY + r * cell, cell);
+        }
+      }
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────
+     RENDER QR (preview)
+  ────────────────────────────────────────────────────────── */
   function renderQR() {
-    const value  = buildValue();
+    var value = buildValue();
     currentValue = value;
 
     if (!value) {
@@ -118,134 +300,97 @@
       return;
     }
 
-    const fg     = fgPick.value;
-    const bg     = bgPick.value;
-    const margin = marginEl.value;
-    const ecc    = eccEl.value;
+    var ecc   = eccEl.value;
+    var fg    = fgPick.value;
+    var bg    = bgPick.value;
 
-    // Show loading state
     qrEmpty.classList.add("hidden");
     qrCanvas.classList.remove("hidden");
     qrCanvas.classList.add("qr-loading");
 
-    const url = buildURL(value, 200, fg, bg, margin, ecc);
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-
-    img.onload = function () {
-      const ctx = qrCanvas.getContext("2d");
-      qrCanvas.width  = 200;
-      qrCanvas.height = 200;
-      ctx.drawImage(img, 0, 0, 200, 200);
-      qrCanvas.classList.remove("qr-loading");
-      actionsEl.classList.remove("hidden");
-      hintEl.textContent = HINTS[currentTab] || "";
-      hintEl.classList.remove("hidden");
-    };
-
-    img.onerror = function () {
-      qrCanvas.classList.remove("qr-loading");
+    var matrix = getQRMatrix(value, ecc);
+    if (!matrix) {
       qrCanvas.classList.add("hidden");
       qrEmpty.classList.remove("hidden");
-    };
+      return;
+    }
 
-    img.src = url;
+    drawQR(matrix, qrCanvas, fg, bg, currentShape, 350);
+    qrCanvas.classList.remove("qr-loading");
+    actionsEl.classList.remove("hidden");
+    hintEl.textContent = HINTS[currentTab] || "";
+    hintEl.classList.remove("hidden");
   }
 
-  /* ── Schedule update ─────────────────────────────────────── */
   function schedule() {
     clearTimeout(timer);
     timer = setTimeout(renderQR, DEBOUNCE);
   }
 
-  /* ── Download PNG via Canvas ─────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     DOWNLOAD PNG (real blob download)
+  ────────────────────────────────────────────────────────── */
   btnDl.addEventListener("click", function () {
     if (!currentValue) return;
 
-    const size   = parseInt(sizeEl.value, 10);
-    const fg     = fgPick.value;
-    const bg     = bgPick.value;
-    const margin = marginEl.value;
-    const ecc    = eccEl.value;
+    var size   = parseInt(sizeEl.value, 10) || 500;
+    var ecc    = eccEl.value;
+    var fg     = fgPick.value;
+    var bg     = bgPick.value;
+    var shape  = currentShape;
 
-    btnDl.textContent = "⏳ Generando…";
-    btnDl.classList.add("downloading");
-    btnDl.disabled = true;
+    var matrix = getQRMatrix(currentValue, ecc);
+    if (!matrix) { alert("No se pudo generar el QR."); return; }
 
-    const url = buildURL(currentValue, size, fg, bg, margin, ecc);
-    const img = new Image();
-    img.crossOrigin = "anonymous";
+    var offscreen = document.createElement("canvas");
+    drawQR(matrix, offscreen, fg, bg, shape, size);
 
-    img.onload = function () {
-      // Draw into an offscreen canvas at full resolution
-      const offscreen = document.createElement("canvas");
-      offscreen.width  = size;
-      offscreen.height = size;
-      const ctx = offscreen.getContext("2d");
-      ctx.drawImage(img, 0, 0, size, size);
+    offscreen.toBlob(function (blob) {
+      var url = URL.createObjectURL(blob);
+      var a   = document.createElement("a");
+      a.href  = url;
+      a.download = "qrcode_" + shape + "_" + size + "px.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
 
-      // Convert to blob and trigger real download
-      offscreen.toBlob(function (blob) {
-        const objectURL = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = objectURL;
-        a.download = "qrcode_" + size + "px_" + Date.now() + ".png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(objectURL); }, 5000);
-
-        btnDl.textContent = "✓ Descargado";
-        btnDl.disabled = false;
-        btnDl.classList.remove("downloading");
-        setTimeout(function () { btnDl.textContent = "↓ Descargar PNG"; }, 2000);
-      }, "image/png");
-    };
-
-    img.onerror = function () {
-      btnDl.textContent = "↓ Descargar PNG";
-      btnDl.disabled = false;
-      btnDl.classList.remove("downloading");
-      alert("No se pudo descargar. Verificá tu conexión.");
-    };
-
-    img.src = url;
+      var orig = btnDl.textContent;
+      btnDl.textContent = "✓ Descargado";
+      setTimeout(function () { btnDl.textContent = orig; }, 2000);
+    }, "image/png");
   });
 
-  /* ── Copy text ───────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     COPY TEXT
+  ────────────────────────────────────────────────────────── */
   btnCopy.addEventListener("click", function () {
     if (!currentValue) return;
-
-    function onSuccess() {
+    function done() {
       btnCopy.textContent = "✓ Copiado";
       btnCopy.classList.add("copied");
-      setTimeout(function () {
-        btnCopy.textContent = "⧉ Copiar texto";
-        btnCopy.classList.remove("copied");
-      }, 1800);
+      setTimeout(function () { btnCopy.textContent = "⧉ Copiar texto"; btnCopy.classList.remove("copied"); }, 1800);
     }
-
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(currentValue).then(onSuccess).catch(fallback);
-    } else {
-      fallback();
-    }
-
+      navigator.clipboard.writeText(currentValue).then(done).catch(fallback);
+    } else { fallback(); }
     function fallback() {
-      const ta = document.createElement("textarea");
+      var ta = document.createElement("textarea");
       ta.value = currentValue;
-      ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+      ta.style.cssText = "position:fixed;opacity:0";
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand("copy"); onSuccess(); } catch(e) {}
+      try { document.execCommand("copy"); done(); } catch(e) {}
       document.body.removeChild(ta);
     }
   });
 
-  /* ── Tab switching ───────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     TABS
+  ────────────────────────────────────────────────────────── */
   tabs.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      const tab = btn.dataset.tab;
+      var tab = btn.dataset.tab;
       if (tab === currentTab) return;
       tabs.forEach(function (t) { t.classList.remove("active"); });
       btn.classList.add("active");
@@ -257,69 +402,81 @@
     });
   });
 
-  /* ── Field inputs ────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     FIELD INPUTS
+  ────────────────────────────────────────────────────────── */
   document.querySelectorAll(".field-input").forEach(function (el) {
-    // Skip color hex inputs (handled separately) and customize selects
-    el.addEventListener("input", schedule);
+    el.addEventListener("input",  schedule);
     el.addEventListener("change", schedule);
   });
 
-  /* ── Customize toggle ────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     CUSTOMIZE TOGGLE
+  ────────────────────────────────────────────────────────── */
   ctToggle.addEventListener("click", function () {
     customOpen = !customOpen;
     ctBody.classList.toggle("hidden", !customOpen);
-    ctArrow.classList.toggle("open", customOpen);
+    ctArrow.classList.toggle("open",  customOpen);
   });
 
-  /* ── Color pickers sync ──────────────────────────────────── */
-  function syncColor(picker, hexInput) {
-    picker.addEventListener("input", function () {
-      hexInput.value = picker.value.toUpperCase();
+  /* ──────────────────────────────────────────────────────────
+     SHAPE BUTTONS
+  ────────────────────────────────────────────────────────── */
+  shapeBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      shapeBtns.forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      currentShape = btn.dataset.shape;
       schedule();
     });
-    hexInput.addEventListener("input", function () {
-      var val = hexInput.value;
-      if (!val.startsWith("#")) val = "#" + val;
-      if (isValidHex(val)) {
-        picker.value = val.toLowerCase();
+  });
+
+  /* ──────────────────────────────────────────────────────────
+     COLOR PICKERS
+  ────────────────────────────────────────────────────────── */
+  function syncColor(picker, hex) {
+    picker.addEventListener("input", function () {
+      hex.value = picker.value.toUpperCase();
+      schedule();
+    });
+    hex.addEventListener("input", function () {
+      var v = hex.value;
+      if (!v.startsWith("#")) v = "#" + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) {
+        picker.value = v.toLowerCase();
         schedule();
       }
     });
-    hexInput.addEventListener("blur", function () {
-      if (!isValidHex(hexInput.value)) {
-        hexInput.value = picker.value.toUpperCase();
+    hex.addEventListener("blur", function () {
+      if (!/^#[0-9a-fA-F]{6}$/.test(hex.value)) {
+        hex.value = picker.value.toUpperCase();
       }
     });
   }
   syncColor(fgPick, fgHex);
   syncColor(bgPick, bgHex);
 
-  /* ── Margin slider ───────────────────────────────────────── */
-  marginEl.addEventListener("input", function () {
-    marginVal.textContent = marginEl.value;
-    schedule();
-  });
-
-  /* ── ECC select ──────────────────────────────────────────── */
-  eccEl.addEventListener("change", schedule);
-
-  /* ── Size select (no re-render needed, only affects download) */
-  // sizeEl change does not need to re-render preview
-
-  /* ── Presets ─────────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     PRESETS
+  ────────────────────────────────────────────────────────── */
   presets.forEach(function (btn) {
     btn.addEventListener("click", function () {
       var fg = "#" + btn.dataset.fg;
       var bg = "#" + btn.dataset.bg;
-      fgPick.value  = fg;
-      fgHex.value   = fg.toUpperCase();
-      bgPick.value  = bg;
-      bgHex.value   = bg.toUpperCase();
+      fgPick.value = fg; fgHex.value = fg.toUpperCase();
+      bgPick.value = bg; bgHex.value = bg.toUpperCase();
       schedule();
     });
   });
 
-  /* ── Init ────────────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────────
+     ECC change
+  ────────────────────────────────────────────────────────── */
+  eccEl.addEventListener("change", schedule);
+
+  /* ──────────────────────────────────────────────────────────
+     INIT
+  ────────────────────────────────────────────────────────── */
   schedule();
 
 })();
