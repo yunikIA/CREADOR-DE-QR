@@ -20,7 +20,7 @@
     <header class="header">
       <div class="logo">
         QR<span class="accent">_</span>GEN
-        <span class="version">v1.0</span>
+        <span class="version">v2.0</span>
       </div>
       <p class="subtitle">Generador de códigos QR — URL · Texto · Contacto · WiFi</p>
     </header>
@@ -28,7 +28,7 @@
     <!-- Layout -->
     <div class="layout">
 
-      <!-- Left: Form -->
+      <!-- Left: Form + Customization -->
       <div class="form-panel">
 
         <!-- Tabs -->
@@ -41,19 +41,16 @@
 
         <!-- Panels -->
         <div class="fields">
-
           <!-- URL -->
           <div class="panel active" id="panel-url">
             <label class="field-label">URL</label>
             <input class="field-input" id="url" type="url" placeholder="https://ejemplo.com" value="https://" />
           </div>
-
           <!-- Text -->
           <div class="panel" id="panel-text">
             <label class="field-label">Mensaje o texto libre</label>
             <textarea class="field-input field-textarea" id="text" placeholder="Escribe lo que quieras..."></textarea>
           </div>
-
           <!-- Contact -->
           <div class="panel" id="panel-contact">
             <label class="field-label">Nombre completo</label>
@@ -65,7 +62,6 @@
             <label class="field-label mt">Empresa (opcional)</label>
             <input class="field-input" id="c-org" type="text" placeholder="Empresa S.A." />
           </div>
-
           <!-- WiFi -->
           <div class="panel" id="panel-wifi">
             <label class="field-label">Nombre de red (SSID)</label>
@@ -79,8 +75,80 @@
               <option value="nopass">Sin contraseña</option>
             </select>
           </div>
-
         </div>
+
+        <!-- ── Personalización ── -->
+        <div class="customize-block">
+          <button class="customize-toggle" id="customize-toggle">
+            <span class="ct-icon">⚙</span>
+            <span class="ct-label">Personalizar QR</span>
+            <span class="ct-arrow" id="ct-arrow">▾</span>
+          </button>
+
+          <div class="customize-body hidden" id="customize-body">
+
+            <div class="custom-row">
+              <div class="custom-col">
+                <label class="field-label">Color de puntos</label>
+                <div class="color-wrap">
+                  <input type="color" class="color-pick" id="c-fg" value="#000000" />
+                  <input type="text" class="field-input color-hex" id="c-fg-hex" value="#000000" maxlength="7" />
+                </div>
+              </div>
+              <div class="custom-col">
+                <label class="field-label">Color de fondo</label>
+                <div class="color-wrap">
+                  <input type="color" class="color-pick" id="c-bg" value="#ffffff" />
+                  <input type="text" class="field-input color-hex" id="c-bg-hex" value="#ffffff" maxlength="7" />
+                </div>
+              </div>
+            </div>
+
+            <div class="custom-row">
+              <div class="custom-col">
+                <label class="field-label">Tamaño de descarga</label>
+                <select class="field-input field-select" id="c-size">
+                  <option value="300">300 × 300 px</option>
+                  <option value="500" selected>500 × 500 px</option>
+                  <option value="800">800 × 800 px</option>
+                  <option value="1200">1200 × 1200 px</option>
+                </select>
+              </div>
+              <div class="custom-col">
+                <label class="field-label">Corrección de errores</label>
+                <select class="field-input field-select" id="c-ecc">
+                  <option value="L">L — 7%</option>
+                  <option value="M" selected>M — 15%</option>
+                  <option value="Q">Q — 25%</option>
+                  <option value="H">H — 30%</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="custom-row">
+              <div class="custom-col full">
+                <label class="field-label">Margen (quiet zone) — <span id="c-margin-val">10</span>px</label>
+                <input type="range" class="slider" id="c-margin" min="0" max="30" value="10" step="1" />
+              </div>
+            </div>
+
+            <div class="presets">
+              <span class="field-label" style="margin-bottom:0.5rem;display:block">Presets de color</span>
+              <div class="preset-list">
+                <button class="preset" data-fg="000000" data-bg="ffffff" title="Clásico"><span style="background:#000;border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="ffffff" data-bg="0d0d0d" title="Dark"><span style="background:#0d0d0d;border:1px solid #555;border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="c8a96e" data-bg="0d0d0d" title="Gold"><span style="background:linear-gradient(135deg,#c8a96e,#0d0d0d);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="1a1a2e" data-bg="e8f4f8" title="Navy"><span style="background:linear-gradient(135deg,#1a1a2e,#e8f4f8);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="e63946" data-bg="fff1f0" title="Rojo"><span style="background:linear-gradient(135deg,#e63946,#fff1f0);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="2d6a4f" data-bg="d8f3dc" title="Verde"><span style="background:linear-gradient(135deg,#2d6a4f,#d8f3dc);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="5c4033" data-bg="fdf6ec" title="Café"><span style="background:linear-gradient(135deg,#5c4033,#fdf6ec);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+                <button class="preset" data-fg="6c3fc5" data-bg="f3eeff" title="Morado"><span style="background:linear-gradient(135deg,#6c3fc5,#f3eeff);border-radius:3px;display:block;width:100%;height:100%"></span></button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
 
       <!-- Right: QR Preview -->
@@ -91,7 +159,7 @@
           <div class="corner bl"></div>
           <div class="corner br"></div>
 
-          <img id="qr-img" src="" alt="Código QR" class="qr-img hidden" />
+          <canvas id="qr-canvas" class="qr-canvas hidden"></canvas>
 
           <div class="qr-empty" id="qr-empty">
             <span class="qr-empty-icon">◻</span>
@@ -100,7 +168,7 @@
         </div>
 
         <div class="actions hidden" id="actions">
-          <button class="btn btn-primary" id="btn-download">↓ Descargar</button>
+          <button class="btn btn-primary" id="btn-download">↓ Descargar PNG</button>
           <button class="btn btn-secondary" id="btn-copy">⧉ Copiar texto</button>
         </div>
 

@@ -1,28 +1,43 @@
-/* ─── QR_GEN — app.js ────────────────────────────────────── */
+/* ─── QR_GEN v2.0 — app.js ───────────────────────────────── */
 
 (function () {
   "use strict";
 
   /* ── Config ──────────────────────────────────────────────── */
-  const QR_BASE = "https://api.qrserver.com/v1/create-qr-code/";
-  const DEBOUNCE_MS = 420;
-
-  /* ── Elements ────────────────────────────────────────────── */
-  const tabs      = document.querySelectorAll(".tab");
-  const panels    = document.querySelectorAll(".panel");
-  const qrImg     = document.getElementById("qr-img");
-  const qrEmpty   = document.getElementById("qr-empty");
-  const actions   = document.getElementById("actions");
-  const hintEl    = document.getElementById("hint");
-  const btnDl     = document.getElementById("btn-download");
-  const btnCopy   = document.getElementById("btn-copy");
+  const QR_BASE    = "https://api.qrserver.com/v1/create-qr-code/";
+  const DEBOUNCE   = 450;
 
   /* ── State ───────────────────────────────────────────────── */
-  let currentTab = "url";
-  let currentQRValue = "";
-  let debounceTimer = null;
+  let currentTab   = "url";
+  let currentValue = "";
+  let timer        = null;
+  let customOpen   = false;
 
-  /* ── Hints per tab ───────────────────────────────────────── */
+  /* ── DOM refs ────────────────────────────────────────────── */
+  const tabs       = document.querySelectorAll(".tab");
+  const panels     = document.querySelectorAll(".panel");
+  const qrCanvas   = document.getElementById("qr-canvas");
+  const qrEmpty    = document.getElementById("qr-empty");
+  const actionsEl  = document.getElementById("actions");
+  const hintEl     = document.getElementById("hint");
+  const btnDl      = document.getElementById("btn-download");
+  const btnCopy    = document.getElementById("btn-copy");
+  const ctToggle   = document.getElementById("customize-toggle");
+  const ctBody     = document.getElementById("customize-body");
+  const ctArrow    = document.getElementById("ct-arrow");
+
+  // Color pickers
+  const fgPick     = document.getElementById("c-fg");
+  const fgHex      = document.getElementById("c-fg-hex");
+  const bgPick     = document.getElementById("c-bg");
+  const bgHex      = document.getElementById("c-bg-hex");
+  const sizeEl     = document.getElementById("c-size");
+  const eccEl      = document.getElementById("c-ecc");
+  const marginEl   = document.getElementById("c-margin");
+  const marginVal  = document.getElementById("c-margin-val");
+  const presets    = document.querySelectorAll(".preset");
+
+  /* ── Hints ───────────────────────────────────────────────── */
   const HINTS = {
     url:     "escaneable con cualquier cámara",
     text:    "texto plano codificado",
@@ -30,9 +45,19 @@
     wifi:    "compatible con iOS & Android",
   };
 
-  /* ── Build QR value ──────────────────────────────────────── */
-  function buildValue(tab) {
-    switch (tab) {
+  /* ── Helpers ─────────────────────────────────────────────── */
+  function hexWithout(hex) {
+    // Remove # for API
+    return hex.replace(/^#/, "");
+  }
+
+  function isValidHex(val) {
+    return /^#[0-9a-fA-F]{6}$/.test(val);
+  }
+
+  /* ── Build QR data string ────────────────────────────────── */
+  function buildValue() {
+    switch (currentTab) {
       case "url":
         return document.getElementById("url").value.trim();
 
@@ -46,12 +71,11 @@
         const org   = document.getElementById("c-org").value.trim();
         if (!name && !phone && !email) return "";
         return [
-          "BEGIN:VCARD",
-          "VERSION:3.0",
-          `FN:${name}`,
-          phone ? `TEL:${phone}` : "",
-          email ? `EMAIL:${email}` : "",
-          org   ? `ORG:${org}`   : "",
+          "BEGIN:VCARD", "VERSION:3.0",
+          "FN:" + name,
+          phone ? "TEL:" + phone : null,
+          email ? "EMAIL:" + email : null,
+          org   ? "ORG:" + org   : null,
           "END:VCARD",
         ].filter(Boolean).join("\n");
       }
@@ -61,141 +85,241 @@
         if (!ssid) return "";
         const pass = document.getElementById("w-pass").value;
         const sec  = document.getElementById("w-sec").value;
-        return `WIFI:T:${sec};S:${ssid};P:${pass};;`;
+        return "WIFI:T:" + sec + ";S:" + ssid + ";P:" + pass + ";;";
       }
-
-      default:
-        return "";
     }
+    return "";
   }
 
   /* ── Build API URL ───────────────────────────────────────── */
-  function qrURL(value, size) {
+  function buildURL(value, size, fg, bg, margin, ecc) {
     const params = new URLSearchParams({
-      size:    `${size}x${size}`,
+      size:    size + "x" + size,
       data:    value,
-      bgcolor: "0d0d0d",
-      color:   "f5f0e8",
-      margin:  "10",
+      color:   hexWithout(fg),
+      bgcolor: hexWithout(bg),
+      margin:  margin,
+      ecc:     ecc,
+      format:  "png",
     });
-    return `${QR_BASE}?${params.toString()}`;
+    return QR_BASE + "?" + params.toString();
   }
 
-  /* ── Render QR ───────────────────────────────────────────── */
-  function renderQR(value) {
-    currentQRValue = value;
+  /* ── Render QR into canvas ───────────────────────────────── */
+  function renderQR() {
+    const value  = buildValue();
+    currentValue = value;
 
     if (!value) {
-      qrImg.classList.add("hidden");
-      qrImg.classList.remove("visible", "qr-loading");
+      qrCanvas.classList.add("hidden");
       qrEmpty.classList.remove("hidden");
-      actions.classList.add("hidden");
+      actionsEl.classList.add("hidden");
       hintEl.classList.add("hidden");
       return;
     }
 
-    // Show loading pulse on empty icon
+    const fg     = fgPick.value;
+    const bg     = bgPick.value;
+    const margin = marginEl.value;
+    const ecc    = eccEl.value;
+
+    // Show loading state
     qrEmpty.classList.add("hidden");
-    qrImg.classList.remove("hidden", "visible");
-    qrImg.classList.add("qr-loading");
+    qrCanvas.classList.remove("hidden");
+    qrCanvas.classList.add("qr-loading");
 
-    const src = qrURL(value, 200);
+    const url = buildURL(value, 200, fg, bg, margin, ecc);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
 
-    const tempImg = new Image();
-    tempImg.onload = function () {
-      qrImg.src = src;
-      qrImg.classList.remove("qr-loading");
-      qrImg.classList.add("visible");
-      actions.classList.remove("hidden");
+    img.onload = function () {
+      const ctx = qrCanvas.getContext("2d");
+      qrCanvas.width  = 200;
+      qrCanvas.height = 200;
+      ctx.drawImage(img, 0, 0, 200, 200);
+      qrCanvas.classList.remove("qr-loading");
+      actionsEl.classList.remove("hidden");
       hintEl.textContent = HINTS[currentTab] || "";
       hintEl.classList.remove("hidden");
     };
-    tempImg.onerror = function () {
-      qrImg.classList.remove("qr-loading");
+
+    img.onerror = function () {
+      qrCanvas.classList.remove("qr-loading");
+      qrCanvas.classList.add("hidden");
       qrEmpty.classList.remove("hidden");
-      qrImg.classList.add("hidden");
     };
-    tempImg.src = src;
+
+    img.src = url;
   }
 
   /* ── Schedule update ─────────────────────────────────────── */
-  function scheduleUpdate() {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(function () {
-      renderQR(buildValue(currentTab));
-    }, DEBOUNCE_MS);
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(renderQR, DEBOUNCE);
   }
+
+  /* ── Download PNG via Canvas ─────────────────────────────── */
+  btnDl.addEventListener("click", function () {
+    if (!currentValue) return;
+
+    const size   = parseInt(sizeEl.value, 10);
+    const fg     = fgPick.value;
+    const bg     = bgPick.value;
+    const margin = marginEl.value;
+    const ecc    = eccEl.value;
+
+    btnDl.textContent = "⏳ Generando…";
+    btnDl.classList.add("downloading");
+    btnDl.disabled = true;
+
+    const url = buildURL(currentValue, size, fg, bg, margin, ecc);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+
+    img.onload = function () {
+      // Draw into an offscreen canvas at full resolution
+      const offscreen = document.createElement("canvas");
+      offscreen.width  = size;
+      offscreen.height = size;
+      const ctx = offscreen.getContext("2d");
+      ctx.drawImage(img, 0, 0, size, size);
+
+      // Convert to blob and trigger real download
+      offscreen.toBlob(function (blob) {
+        const objectURL = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = objectURL;
+        a.download = "qrcode_" + size + "px_" + Date.now() + ".png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(objectURL); }, 5000);
+
+        btnDl.textContent = "✓ Descargado";
+        btnDl.disabled = false;
+        btnDl.classList.remove("downloading");
+        setTimeout(function () { btnDl.textContent = "↓ Descargar PNG"; }, 2000);
+      }, "image/png");
+    };
+
+    img.onerror = function () {
+      btnDl.textContent = "↓ Descargar PNG";
+      btnDl.disabled = false;
+      btnDl.classList.remove("downloading");
+      alert("No se pudo descargar. Verificá tu conexión.");
+    };
+
+    img.src = url;
+  });
+
+  /* ── Copy text ───────────────────────────────────────────── */
+  btnCopy.addEventListener("click", function () {
+    if (!currentValue) return;
+
+    function onSuccess() {
+      btnCopy.textContent = "✓ Copiado";
+      btnCopy.classList.add("copied");
+      setTimeout(function () {
+        btnCopy.textContent = "⧉ Copiar texto";
+        btnCopy.classList.remove("copied");
+      }, 1800);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(currentValue).then(onSuccess).catch(fallback);
+    } else {
+      fallback();
+    }
+
+    function fallback() {
+      const ta = document.createElement("textarea");
+      ta.value = currentValue;
+      ta.style.cssText = "position:fixed;opacity:0;top:0;left:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); onSuccess(); } catch(e) {}
+      document.body.removeChild(ta);
+    }
+  });
 
   /* ── Tab switching ───────────────────────────────────────── */
   tabs.forEach(function (btn) {
     btn.addEventListener("click", function () {
       const tab = btn.dataset.tab;
       if (tab === currentTab) return;
-
-      // Update active tab
       tabs.forEach(function (t) { t.classList.remove("active"); });
       btn.classList.add("active");
-
-      // Update active panel
       panels.forEach(function (p) { p.classList.remove("active"); });
-      const panel = document.getElementById("panel-" + tab);
+      var panel = document.getElementById("panel-" + tab);
       if (panel) panel.classList.add("active");
-
       currentTab = tab;
-      scheduleUpdate();
+      schedule();
     });
   });
 
-  /* ── Input listeners ─────────────────────────────────────── */
-  const inputs = document.querySelectorAll(".field-input");
-  inputs.forEach(function (el) {
-    el.addEventListener("input", scheduleUpdate);
-    el.addEventListener("change", scheduleUpdate);
+  /* ── Field inputs ────────────────────────────────────────── */
+  document.querySelectorAll(".field-input").forEach(function (el) {
+    // Skip color hex inputs (handled separately) and customize selects
+    el.addEventListener("input", schedule);
+    el.addEventListener("change", schedule);
   });
 
-  /* ── Download ────────────────────────────────────────────── */
-  btnDl.addEventListener("click", function () {
-    if (!currentQRValue) return;
-    const url = qrURL(currentQRValue, 400);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "qrcode_" + Date.now() + ".png";
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  /* ── Customize toggle ────────────────────────────────────── */
+  ctToggle.addEventListener("click", function () {
+    customOpen = !customOpen;
+    ctBody.classList.toggle("hidden", !customOpen);
+    ctArrow.classList.toggle("open", customOpen);
   });
 
-  /* ── Copy text ───────────────────────────────────────────── */
-  btnCopy.addEventListener("click", function () {
-    if (!currentQRValue) return;
-    navigator.clipboard.writeText(currentQRValue).then(function () {
-      btnCopy.textContent = "✓ Copiado";
-      btnCopy.classList.add("copied");
-      setTimeout(function () {
-        btnCopy.textContent = "⧉ Copiar texto";
-        btnCopy.classList.remove("copied");
-      }, 1800);
-    }).catch(function () {
-      // Fallback for browsers without clipboard API
-      const ta = document.createElement("textarea");
-      ta.value = currentQRValue;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-      btnCopy.textContent = "✓ Copiado";
-      btnCopy.classList.add("copied");
-      setTimeout(function () {
-        btnCopy.textContent = "⧉ Copiar texto";
-        btnCopy.classList.remove("copied");
-      }, 1800);
+  /* ── Color pickers sync ──────────────────────────────────── */
+  function syncColor(picker, hexInput) {
+    picker.addEventListener("input", function () {
+      hexInput.value = picker.value.toUpperCase();
+      schedule();
+    });
+    hexInput.addEventListener("input", function () {
+      var val = hexInput.value;
+      if (!val.startsWith("#")) val = "#" + val;
+      if (isValidHex(val)) {
+        picker.value = val.toLowerCase();
+        schedule();
+      }
+    });
+    hexInput.addEventListener("blur", function () {
+      if (!isValidHex(hexInput.value)) {
+        hexInput.value = picker.value.toUpperCase();
+      }
+    });
+  }
+  syncColor(fgPick, fgHex);
+  syncColor(bgPick, bgHex);
+
+  /* ── Margin slider ───────────────────────────────────────── */
+  marginEl.addEventListener("input", function () {
+    marginVal.textContent = marginEl.value;
+    schedule();
+  });
+
+  /* ── ECC select ──────────────────────────────────────────── */
+  eccEl.addEventListener("change", schedule);
+
+  /* ── Size select (no re-render needed, only affects download) */
+  // sizeEl change does not need to re-render preview
+
+  /* ── Presets ─────────────────────────────────────────────── */
+  presets.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var fg = "#" + btn.dataset.fg;
+      var bg = "#" + btn.dataset.bg;
+      fgPick.value  = fg;
+      fgHex.value   = fg.toUpperCase();
+      bgPick.value  = bg;
+      bgHex.value   = bg.toUpperCase();
+      schedule();
     });
   });
 
   /* ── Init ────────────────────────────────────────────────── */
-  scheduleUpdate();
+  schedule();
 
 })();
