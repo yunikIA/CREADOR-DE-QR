@@ -4,12 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>QR_GEN — Generador de Códigos QR</title>
-  <meta name="description" content="Generador de códigos QR personalizado para URLs, texto, contactos y redes WiFi." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
-  <!-- QR generator library (pure JS, no dependencies) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- qr-code-styling: genera QR con formas custom y legibles -->
+  <script src="https://unpkg.com/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js"></script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -18,44 +17,36 @@
 
   <main class="container">
 
-    <!-- Header -->
     <header class="header">
       <div class="header-top">
-        <div class="logo">
-          QR<span class="accent">_</span>GEN
-          <span class="version">v3.0</span>
-        </div>
-        <!-- Theme toggle -->
-        <button class="theme-toggle" id="theme-toggle" title="Cambiar tema" aria-label="Cambiar modo claro/oscuro">
-          <span class="theme-icon" id="theme-icon">☀</span>
-          <span class="theme-label" id="theme-label">Modo claro</span>
+        <div class="logo">QR<span class="accent">_</span>GEN <span class="version">v3.0</span></div>
+        <button class="theme-toggle" id="theme-toggle">
+          <span id="theme-icon">☀</span>
+          <span id="theme-label">Modo claro</span>
         </button>
       </div>
       <p class="subtitle">Generador de códigos QR — URL · Texto · Contacto · WiFi</p>
     </header>
 
-    <!-- Layout -->
     <div class="layout">
 
       <!-- Left: Form + Customization -->
       <div class="form-panel">
 
-        <!-- Tabs -->
         <div class="tabs" role="tablist">
-          <button class="tab active" data-tab="url" role="tab">🔗 URL</button>
-          <button class="tab" data-tab="text" role="tab">✏️ Texto</button>
-          <button class="tab" data-tab="contact" role="tab">👤 Contacto</button>
-          <button class="tab" data-tab="wifi" role="tab">📶 WiFi</button>
+          <button class="tab active" data-tab="url">🔗 URL</button>
+          <button class="tab" data-tab="text">✏️ Texto</button>
+          <button class="tab" data-tab="contact">👤 Contacto</button>
+          <button class="tab" data-tab="wifi">📶 WiFi</button>
         </div>
 
-        <!-- Panels -->
         <div class="fields">
           <div class="panel active" id="panel-url">
             <label class="field-label">URL</label>
-            <input class="field-input" id="url" type="url" placeholder="https://ejemplo.com" value="https://" />
+            <input class="field-input" id="url" type="url" placeholder="https://ejemplo.com" value="https://ejemplo.com" />
           </div>
           <div class="panel" id="panel-text">
-            <label class="field-label">Mensaje o texto libre</label>
+            <label class="field-label">Texto libre</label>
             <textarea class="field-input field-textarea" id="text" placeholder="Escribe lo que quieras..."></textarea>
           </div>
           <div class="panel" id="panel-contact">
@@ -82,7 +73,7 @@
           </div>
         </div>
 
-        <!-- ── Personalización ── -->
+        <!-- Personalización -->
         <div class="customize-block">
           <button class="customize-toggle" id="customize-toggle">
             <span class="ct-icon">⚙</span>
@@ -92,41 +83,68 @@
 
           <div class="customize-body hidden" id="customize-body">
 
-            <!-- Forma de los módulos -->
+            <!-- Forma de los puntos (dots) -->
             <div class="custom-section">
-              <label class="field-label">Forma de los módulos</label>
-              <div class="shape-grid">
-                <button class="shape-btn active" data-shape="square" title="Cuadrado">
-                  <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" rx="1"/></svg>
+              <label class="field-label">Forma de los puntos</label>
+              <div class="shape-grid" id="dots-grid">
+                <button class="shape-btn active" data-shape="square">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>
                   <span>Cuadrado</span>
                 </button>
-                <button class="shape-btn" data-shape="rounded" title="Redondeado">
-                  <svg viewBox="0 0 20 20"><rect x="2" y="2" width="16" height="16" rx="5"/></svg>
+                <button class="shape-btn" data-shape="rounded">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="6"/></svg>
                   <span>Redondeado</span>
                 </button>
-                <button class="shape-btn" data-shape="circle" title="Círculo">
-                  <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/></svg>
+                <button class="shape-btn" data-shape="dots">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
                   <span>Círculo</span>
                 </button>
-                <button class="shape-btn" data-shape="diamond" title="Diamante">
-                  <svg viewBox="0 0 20 20"><polygon points="10,2 18,10 10,18 2,10"/></svg>
-                  <span>Diamante</span>
+                <button class="shape-btn" data-shape="classy">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><polygon points="3,3 9,3 3,9" fill="white"/></svg>
+                  <span>Classy</span>
                 </button>
-                <button class="shape-btn" data-shape="star" title="Estrella">
-                  <svg viewBox="0 0 20 20"><polygon points="10,1 12.9,7 19.5,7.6 14.5,12 16.2,18.5 10,15 3.8,18.5 5.5,12 0.5,7.6 7.1,7"/></svg>
-                  <span>Estrella</span>
+                <button class="shape-btn" data-shape="classy-rounded">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="6"/><polygon points="3,3 9,3 3,9" fill="white" rx="2"/></svg>
+                  <span>Classy R.</span>
                 </button>
-                <button class="shape-btn" data-shape="heart" title="Corazón">
-                  <svg viewBox="0 0 20 20"><path d="M10,17 C10,17 2,12 2,6.5 C2,4 4,2 6.5,2 C8,2 9.5,3 10,4 C10.5,3 12,2 13.5,2 C16,2 18,4 18,6.5 C18,12 10,17 10,17Z"/></svg>
-                  <span>Corazón</span>
+                <button class="shape-btn" data-shape="extra-rounded">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="9"/></svg>
+                  <span>Extra R.</span>
                 </button>
-                <button class="shape-btn" data-shape="leaf" title="Hoja">
-                  <svg viewBox="0 0 20 20"><path d="M10,18 C10,18 2,14 2,7 C2,7 6,2 10,2 C14,2 18,7 18,7 C18,14 10,18 10,18Z"/></svg>
-                  <span>Hoja</span>
+              </div>
+            </div>
+
+            <!-- Forma de los ojos (corners) -->
+            <div class="custom-section">
+              <label class="field-label">Forma de los ojos (esquinas)</label>
+              <div class="shape-grid" id="corners-grid">
+                <button class="shape-btn corner-btn active" data-corner-square="square" data-corner-dot="square">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="2" y="2" width="20" height="20" rx="1" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                    <rect x="7" y="7" width="10" height="10" rx="0"/>
+                  </svg>
+                  <span>Cuadrado</span>
                 </button>
-                <button class="shape-btn" data-shape="cross" title="Cruz">
-                  <svg viewBox="0 0 20 20"><rect x="7" y="1" width="6" height="18" rx="1"/><rect x="1" y="7" width="18" height="6" rx="1"/></svg>
-                  <span>Cruz</span>
+                <button class="shape-btn corner-btn" data-corner-square="extra-rounded" data-corner-dot="rounded">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="2" y="2" width="20" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                    <rect x="7" y="7" width="10" height="10" rx="3"/>
+                  </svg>
+                  <span>Redondeado</span>
+                </button>
+                <button class="shape-btn corner-btn" data-corner-square="extra-rounded" data-corner-dot="dot">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="2" y="2" width="20" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                    <circle cx="12" cy="12" r="5"/>
+                  </svg>
+                  <span>Círculo</span>
+                </button>
+                <button class="shape-btn corner-btn" data-corner-square="square" data-corner-dot="dot">
+                  <svg viewBox="0 0 24 24">
+                    <rect x="2" y="2" width="20" height="20" rx="1" fill="none" stroke="currentColor" stroke-width="2.5"/>
+                    <circle cx="12" cy="12" r="5"/>
+                  </svg>
+                  <span>Mixto</span>
                 </button>
               </div>
             </div>
@@ -135,7 +153,7 @@
             <div class="custom-section">
               <div class="custom-row">
                 <div class="custom-col">
-                  <label class="field-label">Color de módulos</label>
+                  <label class="field-label">Color de puntos</label>
                   <div class="color-wrap">
                     <input type="color" class="color-pick" id="c-fg" value="#000000" />
                     <input type="text" class="field-input color-hex" id="c-fg-hex" value="#000000" maxlength="7" />
@@ -151,7 +169,7 @@
               </div>
             </div>
 
-            <!-- Tamaño y ECC -->
+            <!-- Tamaño y corrección -->
             <div class="custom-section">
               <div class="custom-row">
                 <div class="custom-col">
@@ -177,10 +195,10 @@
 
             <!-- Presets -->
             <div class="custom-section">
-              <label class="field-label" style="margin-bottom:0.6rem">Presets de color</label>
+              <label class="field-label" style="margin-bottom:.55rem">Presets de color</label>
               <div class="preset-list">
                 <button class="preset" data-fg="000000" data-bg="ffffff" title="Clásico"><span style="background:#000"></span></button>
-                <button class="preset" data-fg="ffffff" data-bg="0d0d0d" title="Dark"><span style="background:#0d0d0d;border:1px solid #555"></span></button>
+                <button class="preset" data-fg="ffffff" data-bg="0d0d0d" title="Dark"><span style="background:#0d0d0d;border:1px solid #444"></span></button>
                 <button class="preset" data-fg="c8a96e" data-bg="0d0d0d" title="Gold"><span style="background:linear-gradient(135deg,#c8a96e 50%,#0d0d0d 50%)"></span></button>
                 <button class="preset" data-fg="1a1a2e" data-bg="e8f4f8" title="Navy"><span style="background:linear-gradient(135deg,#1a1a2e 50%,#e8f4f8 50%)"></span></button>
                 <button class="preset" data-fg="e63946" data-bg="fff1f0" title="Rojo"><span style="background:linear-gradient(135deg,#e63946 50%,#fff1f0 50%)"></span></button>
@@ -202,7 +220,7 @@
           <div class="corner tr"></div>
           <div class="corner bl"></div>
           <div class="corner br"></div>
-          <canvas id="qr-canvas" class="qr-canvas hidden"></canvas>
+          <div id="qr-container" class="qr-container"></div>
           <div class="qr-empty" id="qr-empty">
             <span class="qr-empty-icon">◻</span>
             <span class="qr-empty-text">esperando datos</span>

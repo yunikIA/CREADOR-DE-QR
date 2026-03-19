@@ -1,12 +1,12 @@
 /* ─── QR_GEN v3.0 — app.js ───────────────────────────────── */
-/* Genera QR 100% local con canvas + formas personalizadas    */
+/* Usa qr-code-styling para formas reales y legibles           */
 
 (function () {
   "use strict";
 
-  /* ── Constants ───────────────────────────────────────────── */
-  const DEBOUNCE = 400;
-  const HINTS = {
+  var DEBOUNCE = 500;
+
+  var HINTS = {
     url:     "escaneable con cualquier cámara",
     text:    "texto plano codificado",
     contact: "vCard 3.0 compatible",
@@ -14,53 +14,52 @@
   };
 
   /* ── State ───────────────────────────────────────────────── */
-  let currentTab   = "url";
-  let currentValue = "";
-  let currentShape = "square";
-  let timer        = null;
-  let customOpen   = false;
-  let isDark       = true;
+  var currentTab      = "url";
+  var currentValue    = "";
+  var currentDotShape = "square";
+  var currentCornerSq = "square";
+  var currentCornerDt = "square";
+  var customOpen      = false;
+  var isDark          = true;
+  var timer           = null;
+  var qrInstance      = null;   // QRCodeStyling instance
 
-  /* ── DOM refs ────────────────────────────────────────────── */
-  const html       = document.documentElement;
-  const tabs       = document.querySelectorAll(".tab");
-  const panels     = document.querySelectorAll(".panel");
-  const qrCanvas   = document.getElementById("qr-canvas");
-  const qrEmpty    = document.getElementById("qr-empty");
-  const actionsEl  = document.getElementById("actions");
-  const hintEl     = document.getElementById("hint");
-  const btnDl      = document.getElementById("btn-download");
-  const btnCopy    = document.getElementById("btn-copy");
-  const ctToggle   = document.getElementById("customize-toggle");
-  const ctBody     = document.getElementById("customize-body");
-  const ctArrow    = document.getElementById("ct-arrow");
-  const themeBtn   = document.getElementById("theme-toggle");
-  const themeIcon  = document.getElementById("theme-icon");
-  const themeLabel = document.getElementById("theme-label");
-  const fgPick     = document.getElementById("c-fg");
-  const fgHex      = document.getElementById("c-fg-hex");
-  const bgPick     = document.getElementById("c-bg");
-  const bgHex      = document.getElementById("c-bg-hex");
-  const sizeEl     = document.getElementById("c-size");
-  const eccEl      = document.getElementById("c-ecc");
-  const shapeBtns  = document.querySelectorAll(".shape-btn");
-  const presets    = document.querySelectorAll(".preset");
+  /* ── DOM ─────────────────────────────────────────────────── */
+  var html        = document.documentElement;
+  var tabs        = document.querySelectorAll(".tab");
+  var panels      = document.querySelectorAll(".panel");
+  var qrContainer = document.getElementById("qr-container");
+  var qrEmpty     = document.getElementById("qr-empty");
+  var actionsEl   = document.getElementById("actions");
+  var hintEl      = document.getElementById("hint");
+  var btnDl       = document.getElementById("btn-download");
+  var btnCopy     = document.getElementById("btn-copy");
+  var ctToggle    = document.getElementById("customize-toggle");
+  var ctBody      = document.getElementById("customize-body");
+  var ctArrow     = document.getElementById("ct-arrow");
+  var themeBtn    = document.getElementById("theme-toggle");
+  var themeIcon   = document.getElementById("theme-icon");
+  var themeLabel  = document.getElementById("theme-label");
+  var fgPick      = document.getElementById("c-fg");
+  var fgHex       = document.getElementById("c-fg-hex");
+  var bgPick      = document.getElementById("c-bg");
+  var bgHex       = document.getElementById("c-bg-hex");
+  var sizeEl      = document.getElementById("c-size");
+  var eccEl       = document.getElementById("c-ecc");
+  var dotsBtns    = document.querySelectorAll("#dots-grid .shape-btn");
+  var cornerBtns  = document.querySelectorAll(".corner-btn");
+  var presets     = document.querySelectorAll(".preset");
 
-  /* ──────────────────────────────────────────────────────────
-     THEME TOGGLE
-  ────────────────────────────────────────────────────────── */
+  /* ── Theme ───────────────────────────────────────────────── */
   themeBtn.addEventListener("click", function () {
     isDark = !isDark;
     html.setAttribute("data-theme", isDark ? "dark" : "light");
     themeIcon.textContent  = isDark ? "☀" : "☾";
     themeLabel.textContent = isDark ? "Modo claro" : "Modo oscuro";
-    // Re-render QR so colors still match if using custom colors
     schedule();
   });
 
-  /* ──────────────────────────────────────────────────────────
-     BUILD QR DATA VALUE
-  ────────────────────────────────────────────────────────── */
+  /* ── Build data value ────────────────────────────────────── */
   function buildValue() {
     switch (currentTab) {
       case "url":
@@ -73,250 +72,77 @@
         var email = (document.getElementById("c-email").value || "").trim();
         var org   = (document.getElementById("c-org").value   || "").trim();
         if (!name && !phone && !email) return "";
-        return ["BEGIN:VCARD","VERSION:3.0",
-          "FN:" + name,
-          phone ? "TEL:" + phone : null,
-          email ? "EMAIL:" + email : null,
-          org   ? "ORG:" + org : null,
-          "END:VCARD"
-        ].filter(Boolean).join("\n");
+        return ["BEGIN:VCARD","VERSION:3.0","FN:"+name,
+          phone?"TEL:"+phone:null, email?"EMAIL:"+email:null, org?"ORG:"+org:null,
+          "END:VCARD"].filter(Boolean).join("\n");
       }
       case "wifi": {
         var ssid = (document.getElementById("w-ssid").value || "").trim();
         if (!ssid) return "";
-        var pass = document.getElementById("w-pass").value || "";
-        var sec  = document.getElementById("w-sec").value;
-        return "WIFI:T:" + sec + ";S:" + ssid + ";P:" + pass + ";;";
+        return "WIFI:T:"+(document.getElementById("w-sec").value)+";S:"+ssid+";P:"+(document.getElementById("w-pass").value||"")+";;";
       }
     }
     return "";
   }
 
-  /* ──────────────────────────────────────────────────────────
-     QR MATRIX — uses qrcode.js to get module matrix
-  ────────────────────────────────────────────────────────── */
-  function getQRMatrix(text, ecc) {
-    // qrcode.js exposes QRCode object; we create a hidden div to extract matrix
-    var eccMap = { L: QRCode.CorrectLevel.L, M: QRCode.CorrectLevel.M, Q: QRCode.CorrectLevel.Q, H: QRCode.CorrectLevel.H };
-    var tmp = document.createElement("div");
-    tmp.style.cssText = "position:absolute;left:-9999px;visibility:hidden;";
-    document.body.appendChild(tmp);
-    try {
-      var qr = new QRCode(tmp, {
-        text: text,
-        width: 256, height: 256,
-        correctLevel: eccMap[ecc] || QRCode.CorrectLevel.M,
-      });
-      // Extract the internal matrix from qrcode.js internals
-      var qrObj = qr._oQRCode;
-      var count = qrObj.getModuleCount();
-      var matrix = [];
-      for (var r = 0; r < count; r++) {
-        matrix[r] = [];
-        for (var c = 0; c < count; c++) {
-          matrix[r][c] = qrObj.isDark(r, c);
-        }
-      }
-      return matrix;
-    } catch(e) {
-      return null;
-    } finally {
-      document.body.removeChild(tmp);
-    }
+  /* ── Build QRCodeStyling options ─────────────────────────── */
+  function buildOptions(value, size) {
+    var eccMap = { L:"L", M:"M", Q:"Q", H:"H" };
+    return {
+      width:  size,
+      height: size,
+      type: "canvas",
+      data: value,
+      margin: Math.round(size * 0.04),
+      qrOptions: {
+        errorCorrectionLevel: eccMap[eccEl.value] || "M",
+      },
+      dotsOptions: {
+        color: fgPick.value,
+        type:  currentDotShape,   // square | rounded | dots | classy | classy-rounded | extra-rounded
+      },
+      backgroundOptions: {
+        color: bgPick.value,
+      },
+      cornersSquareOptions: {
+        color: fgPick.value,
+        type:  currentCornerSq,   // square | extra-rounded
+      },
+      cornersDotOptions: {
+        color: fgPick.value,
+        type:  currentCornerDt,   // square | dot | rounded
+      },
+    };
   }
 
-  /* ──────────────────────────────────────────────────────────
-     SHAPE DRAWERS
-     Each receives: ctx, x, y, size (cell size in px), padding
-  ────────────────────────────────────────────────────────── */
-  var Shapes = {
-
-    square: function (ctx, x, y, s) {
-      var p = s * 0.08;
-      ctx.fillRect(x + p, y + p, s - p*2, s - p*2);
-    },
-
-    rounded: function (ctx, x, y, s) {
-      var p  = s * 0.08;
-      var r  = (s - p*2) * 0.38;
-      var x0 = x + p, y0 = y + p, w = s - p*2, h = s - p*2;
-      ctx.beginPath();
-      ctx.moveTo(x0 + r, y0);
-      ctx.arcTo(x0+w, y0,   x0+w, y0+h, r);
-      ctx.arcTo(x0+w, y0+h, x0,   y0+h, r);
-      ctx.arcTo(x0,   y0+h, x0,   y0,   r);
-      ctx.arcTo(x0,   y0,   x0+w, y0,   r);
-      ctx.closePath();
-      ctx.fill();
-    },
-
-    circle: function (ctx, x, y, s) {
-      var p  = s * 0.1;
-      var cx = x + s / 2;
-      var cy = y + s / 2;
-      var r  = (s - p*2) / 2;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.fill();
-    },
-
-    diamond: function (ctx, x, y, s) {
-      var p  = s * 0.1;
-      var cx = x + s / 2;
-      var cy = y + s / 2;
-      var r  = s / 2 - p;
-      ctx.beginPath();
-      ctx.moveTo(cx,     cy - r);
-      ctx.lineTo(cx + r, cy);
-      ctx.lineTo(cx,     cy + r);
-      ctx.lineTo(cx - r, cy);
-      ctx.closePath();
-      ctx.fill();
-    },
-
-    star: function (ctx, x, y, s) {
-      var cx    = x + s / 2;
-      var cy    = y + s / 2;
-      var outer = s / 2 * 0.85;
-      var inner = outer * 0.42;
-      var pts   = 5;
-      ctx.beginPath();
-      for (var i = 0; i < pts * 2; i++) {
-        var angle = (i * Math.PI / pts) - Math.PI / 2;
-        var r     = (i % 2 === 0) ? outer : inner;
-        var px    = cx + r * Math.cos(angle);
-        var py    = cy + r * Math.sin(angle);
-        i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      ctx.fill();
-    },
-
-    heart: function (ctx, x, y, s) {
-      var cx = x + s / 2;
-      var cy = y + s / 2;
-      var w  = s * 0.82;
-      var h  = s * 0.82;
-      var ox = cx - w / 2;
-      var oy = cy - h / 2 + h * 0.1;
-      ctx.beginPath();
-      ctx.moveTo(cx, oy + h * 0.8);
-      // Left curve
-      ctx.bezierCurveTo(
-        ox,             oy + h * 0.5,
-        ox,             oy,
-        cx - w * 0.01,  oy + h * 0.25
-      );
-      // Top left bump
-      ctx.bezierCurveTo(
-        ox + w * 0.15,  oy - h * 0.12,
-        cx,             oy + h * 0.05,
-        cx,             oy + h * 0.28
-      );
-      // Top right bump
-      ctx.bezierCurveTo(
-        cx,             oy + h * 0.05,
-        ox + w * 0.85,  oy - h * 0.12,
-        cx + w * 0.01,  oy + h * 0.25
-      );
-      // Right curve
-      ctx.bezierCurveTo(
-        ox + w,         oy,
-        ox + w,         oy + h * 0.5,
-        cx,             oy + h * 0.8
-      );
-      ctx.closePath();
-      ctx.fill();
-    },
-
-    leaf: function (ctx, x, y, s) {
-      var p  = s * 0.1;
-      var x0 = x + p, y0 = y + p;
-      var w  = s - p*2, h = s - p*2;
-      ctx.beginPath();
-      ctx.moveTo(x0 + w/2, y0);
-      ctx.bezierCurveTo(x0 + w, y0,       x0 + w, y0 + h,   x0 + w/2, y0 + h);
-      ctx.bezierCurveTo(x0,     y0 + h,   x0,     y0,       x0 + w/2, y0);
-      ctx.closePath();
-      ctx.fill();
-    },
-
-    cross: function (ctx, x, y, s) {
-      var p  = s * 0.1;
-      var t  = (s - p*2) * 0.3; // arm thickness ratio
-      var cx = x + s/2, cy = y + s/2;
-      var hs = s/2 - p;
-      ctx.beginPath();
-      ctx.rect(cx - t/2, cy - hs, t, hs*2);
-      ctx.rect(cx - hs,  cy - t/2, hs*2, t);
-      ctx.fill();
-    },
-  };
-
-  /* ──────────────────────────────────────────────────────────
-     DRAW QR ON CANVAS
-  ────────────────────────────────────────────────────────── */
-  function drawQR(matrix, canvas, fgColor, bgColor, shape, canvasSize) {
-    var count   = matrix.length;
-    var padding = Math.round(canvasSize * 0.04);
-    var cell    = Math.floor((canvasSize - padding * 2) / count);
-    var total   = cell * count;
-    var offX    = Math.round((canvasSize - total) / 2);
-    var offY    = offX;
-
-    canvas.width  = canvasSize;
-    canvas.height = canvasSize;
-    var ctx = canvas.getContext("2d");
-
-    // Background
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, canvasSize, canvasSize);
-
-    // Modules
-    ctx.fillStyle = fgColor;
-    var drawFn = Shapes[shape] || Shapes.square;
-
-    for (var r = 0; r < count; r++) {
-      for (var c = 0; c < count; c++) {
-        if (matrix[r][c]) {
-          drawFn(ctx, offX + c * cell, offY + r * cell, cell);
-        }
-      }
-    }
-  }
-
-  /* ──────────────────────────────────────────────────────────
-     RENDER QR (preview)
-  ────────────────────────────────────────────────────────── */
+  /* ── Render QR (preview at 180px) ────────────────────────── */
   function renderQR() {
     var value = buildValue();
     currentValue = value;
 
     if (!value) {
-      qrCanvas.classList.add("hidden");
+      qrContainer.classList.add("hidden");
       qrEmpty.classList.remove("hidden");
       actionsEl.classList.add("hidden");
       hintEl.classList.add("hidden");
       return;
     }
 
-    var ecc   = eccEl.value;
-    var fg    = fgPick.value;
-    var bg    = bgPick.value;
-
     qrEmpty.classList.add("hidden");
-    qrCanvas.classList.remove("hidden");
-    qrCanvas.classList.add("qr-loading");
+    qrContainer.classList.remove("hidden");
 
-    var matrix = getQRMatrix(value, ecc);
-    if (!matrix) {
-      qrCanvas.classList.add("hidden");
-      qrEmpty.classList.remove("hidden");
-      return;
+    var opts = buildOptions(value, 180);
+
+    if (!qrInstance) {
+      // First render: create instance and append canvas
+      qrInstance = new QRCodeStyling(opts);
+      qrContainer.innerHTML = "";
+      qrInstance.append(qrContainer);
+    } else {
+      // Update existing instance
+      qrInstance.update(opts);
     }
 
-    drawQR(matrix, qrCanvas, fg, bg, currentShape, 350);
-    qrCanvas.classList.remove("qr-loading");
     actionsEl.classList.remove("hidden");
     hintEl.textContent = HINTS[currentTab] || "";
     hintEl.classList.remove("hidden");
@@ -327,43 +153,32 @@
     timer = setTimeout(renderQR, DEBOUNCE);
   }
 
-  /* ──────────────────────────────────────────────────────────
-     DOWNLOAD PNG (real blob download)
-  ────────────────────────────────────────────────────────── */
+  /* ── Download PNG ────────────────────────────────────────── */
   btnDl.addEventListener("click", function () {
     if (!currentValue) return;
 
-    var size   = parseInt(sizeEl.value, 10) || 500;
-    var ecc    = eccEl.value;
-    var fg     = fgPick.value;
-    var bg     = bgPick.value;
-    var shape  = currentShape;
+    var size = parseInt(sizeEl.value, 10) || 500;
+    var opts = buildOptions(currentValue, size);
+    var dl   = new QRCodeStyling(opts);
 
-    var matrix = getQRMatrix(currentValue, ecc);
-    if (!matrix) { alert("No se pudo generar el QR."); return; }
+    var orig = btnDl.textContent;
+    btnDl.textContent = "⏳ Generando…";
+    btnDl.disabled = true;
 
-    var offscreen = document.createElement("canvas");
-    drawQR(matrix, offscreen, fg, bg, shape, size);
-
-    offscreen.toBlob(function (blob) {
-      var url = URL.createObjectURL(blob);
-      var a   = document.createElement("a");
-      a.href  = url;
-      a.download = "qrcode_" + shape + "_" + size + "px.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
-
-      var orig = btnDl.textContent;
+    dl.download({
+      name:      "qrcode_" + currentDotShape + "_" + size + "px",
+      extension: "png",
+    }).then(function () {
       btnDl.textContent = "✓ Descargado";
+      btnDl.disabled = false;
       setTimeout(function () { btnDl.textContent = orig; }, 2000);
-    }, "image/png");
+    }).catch(function () {
+      btnDl.textContent = orig;
+      btnDl.disabled = false;
+    });
   });
 
-  /* ──────────────────────────────────────────────────────────
-     COPY TEXT
-  ────────────────────────────────────────────────────────── */
+  /* ── Copy text ───────────────────────────────────────────── */
   btnCopy.addEventListener("click", function () {
     if (!currentValue) return;
     function done() {
@@ -372,22 +187,18 @@
       setTimeout(function () { btnCopy.textContent = "⧉ Copiar texto"; btnCopy.classList.remove("copied"); }, 1800);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(currentValue).then(done).catch(fallback);
-    } else { fallback(); }
-    function fallback() {
+      navigator.clipboard.writeText(currentValue).then(done).catch(fb);
+    } else { fb(); }
+    function fb() {
       var ta = document.createElement("textarea");
-      ta.value = currentValue;
-      ta.style.cssText = "position:fixed;opacity:0";
-      document.body.appendChild(ta);
-      ta.select();
+      ta.value = currentValue; ta.style.cssText = "position:fixed;opacity:0";
+      document.body.appendChild(ta); ta.select();
       try { document.execCommand("copy"); done(); } catch(e) {}
       document.body.removeChild(ta);
     }
   });
 
-  /* ──────────────────────────────────────────────────────────
-     TABS
-  ────────────────────────────────────────────────────────── */
+  /* ── Tabs ────────────────────────────────────────────────── */
   tabs.forEach(function (btn) {
     btn.addEventListener("click", function () {
       var tab = btn.dataset.tab;
@@ -402,81 +213,69 @@
     });
   });
 
-  /* ──────────────────────────────────────────────────────────
-     FIELD INPUTS
-  ────────────────────────────────────────────────────────── */
+  /* ── Field inputs ────────────────────────────────────────── */
   document.querySelectorAll(".field-input").forEach(function (el) {
     el.addEventListener("input",  schedule);
     el.addEventListener("change", schedule);
   });
 
-  /* ──────────────────────────────────────────────────────────
-     CUSTOMIZE TOGGLE
-  ────────────────────────────────────────────────────────── */
+  /* ── Customize toggle ────────────────────────────────────── */
   ctToggle.addEventListener("click", function () {
     customOpen = !customOpen;
     ctBody.classList.toggle("hidden", !customOpen);
     ctArrow.classList.toggle("open",  customOpen);
   });
 
-  /* ──────────────────────────────────────────────────────────
-     SHAPE BUTTONS
-  ────────────────────────────────────────────────────────── */
-  shapeBtns.forEach(function (btn) {
+  /* ── Dot shape buttons ───────────────────────────────────── */
+  dotsBtns.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      shapeBtns.forEach(function (b) { b.classList.remove("active"); });
+      dotsBtns.forEach(function (b) { b.classList.remove("active"); });
       btn.classList.add("active");
-      currentShape = btn.dataset.shape;
+      currentDotShape = btn.dataset.shape;
       schedule();
     });
   });
 
-  /* ──────────────────────────────────────────────────────────
-     COLOR PICKERS
-  ────────────────────────────────────────────────────────── */
-  function syncColor(picker, hex) {
-    picker.addEventListener("input", function () {
-      hex.value = picker.value.toUpperCase();
+  /* ── Corner style buttons ────────────────────────────────── */
+  cornerBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      cornerBtns.forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      currentCornerSq = btn.dataset.cornerSquare;
+      currentCornerDt = btn.dataset.cornerDot;
       schedule();
     });
+  });
+
+  /* ── Color pickers ───────────────────────────────────────── */
+  function syncColor(picker, hex) {
+    picker.addEventListener("input", function () { hex.value = picker.value.toUpperCase(); schedule(); });
     hex.addEventListener("input", function () {
       var v = hex.value;
       if (!v.startsWith("#")) v = "#" + v;
-      if (/^#[0-9a-fA-F]{6}$/.test(v)) {
-        picker.value = v.toLowerCase();
-        schedule();
-      }
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) { picker.value = v.toLowerCase(); schedule(); }
     });
     hex.addEventListener("blur", function () {
-      if (!/^#[0-9a-fA-F]{6}$/.test(hex.value)) {
-        hex.value = picker.value.toUpperCase();
-      }
+      if (!/^#[0-9a-fA-F]{6}$/.test(hex.value)) hex.value = picker.value.toUpperCase();
     });
   }
   syncColor(fgPick, fgHex);
   syncColor(bgPick, bgHex);
 
-  /* ──────────────────────────────────────────────────────────
-     PRESETS
-  ────────────────────────────────────────────────────────── */
+  /* ── Presets ─────────────────────────────────────────────── */
   presets.forEach(function (btn) {
     btn.addEventListener("click", function () {
-      var fg = "#" + btn.dataset.fg;
-      var bg = "#" + btn.dataset.bg;
+      var fg = "#" + btn.dataset.fg, bg = "#" + btn.dataset.bg;
       fgPick.value = fg; fgHex.value = fg.toUpperCase();
       bgPick.value = bg; bgHex.value = bg.toUpperCase();
       schedule();
     });
   });
 
-  /* ──────────────────────────────────────────────────────────
-     ECC change
-  ────────────────────────────────────────────────────────── */
+  /* ── ECC ─────────────────────────────────────────────────── */
   eccEl.addEventListener("change", schedule);
 
-  /* ──────────────────────────────────────────────────────────
-     INIT
-  ────────────────────────────────────────────────────────── */
+  /* ── Init ────────────────────────────────────────────────── */
   schedule();
 
 })();
