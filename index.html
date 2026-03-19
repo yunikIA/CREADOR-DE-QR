@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR_GEN — Generador de Códigos QR</title>
+  <meta name="description" content="Generador de códigos QR para URLs, texto, contactos y redes WiFi." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <div class="grain"></div>
+
+  <main class="container">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        QR<span class="accent">_</span>GEN
+        <span class="version">v1.0</span>
+      </div>
+      <p class="subtitle">Generador de códigos QR — URL · Texto · Contacto · WiFi</p>
+    </header>
+
+    <!-- Layout -->
+    <div class="layout">
+
+      <!-- Left: Form -->
+      <div class="form-panel">
+
+        <!-- Tabs -->
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="url" role="tab">🔗 URL</button>
+          <button class="tab" data-tab="text" role="tab">✏️ Texto</button>
+          <button class="tab" data-tab="contact" role="tab">👤 Contacto</button>
+          <button class="tab" data-tab="wifi" role="tab">📶 WiFi</button>
+        </div>
+
+        <!-- Panels -->
+        <div class="fields">
+
+          <!-- URL -->
+          <div class="panel active" id="panel-url">
+            <label class="field-label">URL</label>
+            <input class="field-input" id="url" type="url" placeholder="https://ejemplo.com" value="https://" />
+          </div>
+
+          <!-- Text -->
+          <div class="panel" id="panel-text">
+            <label class="field-label">Mensaje o texto libre</label>
+            <textarea class="field-input field-textarea" id="text" placeholder="Escribe lo que quieras..."></textarea>
+          </div>
+
+          <!-- Contact -->
+          <div class="panel" id="panel-contact">
+            <label class="field-label">Nombre completo</label>
+            <input class="field-input" id="c-name" type="text" placeholder="Juan Pérez" />
+            <label class="field-label mt">Teléfono</label>
+            <input class="field-input" id="c-phone" type="tel" placeholder="+54 9 11 1234-5678" />
+            <label class="field-label mt">Email</label>
+            <input class="field-input" id="c-email" type="email" placeholder="juan@ejemplo.com" />
+            <label class="field-label mt">Empresa (opcional)</label>
+            <input class="field-input" id="c-org" type="text" placeholder="Empresa S.A." />
+          </div>
+
+          <!-- WiFi -->
+          <div class="panel" id="panel-wifi">
+            <label class="field-label">Nombre de red (SSID)</label>
+            <input class="field-input" id="w-ssid" type="text" placeholder="MiRedWifi" />
+            <label class="field-label mt">Contraseña</label>
+            <input class="field-input" id="w-pass" type="password" placeholder="••••••••" />
+            <label class="field-label mt">Seguridad</label>
+            <select class="field-input field-select" id="w-sec">
+              <option value="WPA">WPA / WPA2</option>
+              <option value="WEP">WEP</option>
+              <option value="nopass">Sin contraseña</option>
+            </select>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right: QR Preview -->
+      <div class="preview-panel">
+        <div class="qr-frame" id="qr-frame">
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+
+          <img id="qr-img" src="" alt="Código QR" class="qr-img hidden" />
+
+          <div class="qr-empty" id="qr-empty">
+            <span class="qr-empty-icon">◻</span>
+            <span class="qr-empty-text">esperando datos</span>
+          </div>
+        </div>
+
+        <div class="actions hidden" id="actions">
+          <button class="btn btn-primary" id="btn-download">↓ Descargar</button>
+          <button class="btn btn-secondary" id="btn-copy">⧉ Copiar texto</button>
+        </div>
+
+        <p class="hint hidden" id="hint"></p>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>QR generado vía qrserver.com</span>
+      <span class="footer-brand">◈ QR_GEN</span>
+    </footer>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
